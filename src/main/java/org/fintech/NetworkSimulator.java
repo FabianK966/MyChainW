@@ -17,9 +17,13 @@ public class NetworkSimulator {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Runnable onUpdateCallback;
     private static final long MIN_WALLET_CREATION_PERIOD = 10;
-    private long currentWalletCreationPeriod = 2000;
+    private long currentWalletCreationPeriod = 3000;
     private final double periodMultiplier = 0.9;
-    private final int periodThreshold = 50;
+    private final int periodThreshold = 20;
+
+    // 🌟 NEUE FELDER FÜR DIE HANDELS-GESCHWINDIGKEITSANALYSE
+    private static final long INITIAL_MIN_DELAY = 900;
+    private static long currentTradeMinDelay = INITIAL_MIN_DELAY; // Speichert die zuletzt berechnete minimale Handelsverzögerung
 
     public NetworkSimulator(Blockchain blockchain, WalletManager walletManager, PriceSimulator priceSimulator) {
         this.blockchain = blockchain;
@@ -40,6 +44,9 @@ public class NetworkSimulator {
     public void start() {
         if (running.getAndSet(true)) return;
 
+        // Beim Start den initialen Wert setzen, falls er durch einen Neustart beeinflusst wurde
+        currentTradeMinDelay = INITIAL_MIN_DELAY;
+
         System.out.println("=== NETZWERK-SIMULATION GESTARTET ===");
 
         // DYNAMISCHE WALLET-ERSTELLUNG STARTEN
@@ -54,6 +61,20 @@ public class NetworkSimulator {
         System.out.println("→ Kauf/Verkauf-Simulationen (Frequenz passt sich der Anzahl der Wallets an)");
         scheduleNextTrade(5);
     }
+
+    // 🌟 NEUE HILFSMETHODE: Zur Verwaltung der minimalen Handelsverzögerung
+    // Muss synchronisiert sein, da sie von zwei Threads (oder mehr) gleichzeitig gelesen/geschrieben werden könnte.
+    private static synchronized long getAndSetCurrentTradeMinDelay(int userCount, long minDelayBase, int reductionFactor, long minDelayFast) {
+        long oldDelay = currentTradeMinDelay;
+
+        // Berechnung wie in scheduleNextTrade
+        long delayReduction = (long) userCount * reductionFactor;
+        long newDelay = Math.max(minDelayFast, minDelayBase - delayReduction);
+
+        currentTradeMinDelay = newDelay;
+        return oldDelay;
+    }
+
 
     // 🌟 NEUE METHODE: Dynamische Planung der nächsten Wallet-Erstellung
     private void scheduleNextWalletCreation(long delay) {
@@ -108,15 +129,23 @@ public class NetworkSimulator {
                 List<Wallet> allWallets = WalletManager.getWallets();
                 int userWalletCount = allWallets.size() - 1;
 
-                long maxDelay = 500;
-                long minDelayBase = 300;
-                long minDelayFast = 100;
+                long maxDelay = 1500;
+                long minDelayBase = 900;
+                long minDelayFast = 10;
+                int reductionFactor = 5;
 
-                int reductionFactor = 30;
+                // 🛑 NUTZT JETZT DIE HILFSMETHODE
+                long oldActualMinDelay = getAndSetCurrentTradeMinDelay(userWalletCount, minDelayBase, reductionFactor, minDelayFast);
 
                 long delayReduction = (long) userWalletCount * reductionFactor;
-
                 long actualMinDelay = Math.max(minDelayFast, minDelayBase - delayReduction);
+
+                // 🌟 NEUE LOGIK: Ausgabe, wenn sich die Basis-Verzögerung geändert hat
+                // Dies passiert, wenn eine neue Wallet erstellt wurde und die userWalletCount gestiegen ist.
+                if (actualMinDelay != oldActualMinDelay) {
+                    System.out.printf("--- HANDELS-SCHWELLE GEÄNDERT (%d Wallets)! Neue Basis-Verzögerung: %.0fms (Maximal: %.0fms) ---%n",
+                            userWalletCount, (double)actualMinDelay, (double)maxDelay);
+                }
 
                 long nextDelay = actualMinDelay + new Random().nextInt((int) (maxDelay - actualMinDelay + 1));
 
@@ -128,7 +157,8 @@ public class NetworkSimulator {
     }
 
     private void simulateTrade() {
-        // ... (unveränderte Initialisierungen und Checks) ...
+        // ... (unveränderter Code von simulateTrade) ...
+
         List<Wallet> allWallets = WalletManager.getWallets();
         Wallet supplyWallet = WalletManager.SUPPLY_WALLET;
         Random r = new Random();
