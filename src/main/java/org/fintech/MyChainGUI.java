@@ -52,7 +52,9 @@ public class MyChainGUI extends Application {
         primaryStage = stage;
 
         blockchain = BlockchainPersistence.loadBlockchain("MyChain", 1);
-        this.priceSimulator = new PriceSimulator(0.1);
+        // 🛑 KORREKTUR: Preis laden oder Standardwert (0.1) verwenden
+        double initialPrice = PriceSimulator.loadPrice(0.1);
+        this.priceSimulator = new PriceSimulator(initialPrice); // PriceSimulator mit geladenem Preis initialisieren
 
         networkSimulator = new NetworkSimulator(blockchain, WalletManager, priceSimulator);
         networkSimulator.setOnUpdate(() -> {
@@ -173,6 +175,7 @@ public class MyChainGUI extends Application {
         stage.setScene(scene);
 
         stage.setOnCloseRequest(e -> {
+            PriceSimulator.savePrice(priceSimulator.getCurrentPrice());
             org.fintech.WalletManager.saveWallets();
             if (networkSimulator != null) networkSimulator.stop();
         });

@@ -70,37 +70,58 @@ public class WalletManager {
         }
     }
 
-    // 🌟 NEUE METHODE: Wallet erstellen mit geschichteter Balance-Logik
     private static Wallet createNewUserWallet() {
         Random r = new Random();
-
         // Die Zählung der User-Wallets ist die Gesamtanzahl der Wallets (minus die Supply Wallet)
-        // Die Supply Wallet ist index 0, daher ist die Anzahl der User-Wallets: wallets.size() - 1
-        int userWalletCount = wallets.size() - 1;
-
-        double startingUsd;
-
-        // Logik: "Jede 8-12. Wallet soll über 500.000 USD haben"
-        // Wir verwenden Modulo 12, und die Nummern 8, 9, 10, 11, 0 (entspricht 12) erhalten eine große Balance.
-        // Das bedeutet: (count % 12) >= 7 oder (count % 12) == 0
-
         // userWalletCount ist die Anzahl der bereits existierenden Wallets. Die neue Wallet ist userWalletCount + 1
-        int newWalletIndexInCycle = (userWalletCount + 1) % 12;
+        int newWalletIndex = wallets.size(); // Gesamtanzahl der Wallets inkl. Supply
+        int userWalletCount = newWalletIndex - 1; // User-Wallets (1-basiert)
+        double startingUsd;
+        String walletType = "NORMALE"; // Standardtyp
+        // -----------------------------------------------------------
+        // 1. OBERSTE PRIORITÄT: EXTREM GROSSE WALLET (50. bis 100.)
+        // -----------------------------------------------------------
+        // Prüfen, ob die neue Wallet in den Zyklus 50 bis 100 fällt.
+        // Wir verwenden Modulo 100 für den Zyklus und prüfen, ob die Nummer 50 oder größer ist (50 bis 99).
+        int cycle50to100 = (userWalletCount + 1) % 100;
 
-        if (newWalletIndexInCycle >= 8 || newWalletIndexInCycle == 0) {
-            // Große Balance: 50.000 USD bis 1.000.000 USD
-            double minLarge = 500000.0;
-            double maxLarge = 10000000.0;
-            startingUsd = minLarge + (maxLarge - minLarge) * r.nextDouble();
-            System.out.printf("GROSSE WALLET erstellt (#%d): %.2f USD%n", userWalletCount + 1, startingUsd);
-        } else {
-            // Normale Balance: 1.000 USD bis < 500.000 USD
-            double minNormal = 5000.0;
-            double maxNormal = 499999.9;
-            startingUsd = minNormal + (maxNormal - minNormal) * r.nextDouble();
-            System.out.printf("NORMALE WALLET erstellt (#%d): %.2f USD%n", userWalletCount + 1, startingUsd);
+        if (cycle50to100 >= 90 || cycle50to100 == 0) { // 50, 51, ..., 99, 100 (bzw. 0)
+
+            // EXTREM GROSSE BALANCE: 10.000.000 USD bis 100.000.000 USD
+            double minMegaLarge = 10000000.0;
+            double maxMegaLarge = 100000000.0;
+            startingUsd = minMegaLarge + (maxMegaLarge - minMegaLarge) * r.nextDouble();
+            walletType = "MEGA-GROSSE";
         }
+        // -----------------------------------------------------------
+        // 2. MITTLERE PRIORITÄT: GROSSE WALLET (8. bis 12.)
+        // -----------------------------------------------------------
+        // Die mittlere Logik wird nur ausgeführt, wenn keine Mega-Wallet erstellt wurde.
+        else {
+            // userWalletCount ist die Anzahl der bereits existierenden Wallets.
+            int newWalletIndexInCycle12 = (userWalletCount + 1) % 12;
 
+            if (newWalletIndexInCycle12 >= 8 || newWalletIndexInCycle12 == 0) {
+
+                // GROSSE BALANCE: 500.000 USD bis 10.000.000 USD
+                double minLarge = 500000.0;
+                double maxLarge = 10000000.0;
+                startingUsd = minLarge + (maxLarge - minLarge) * r.nextDouble();
+                walletType = "GROSSE";
+            }
+            // -----------------------------------------------------------
+            // 3. NIEDRIGSTE PRIORITÄT: NORMALE WALLET (Alle anderen)
+            // -----------------------------------------------------------
+            else {
+                // Normale Balance: 5.000 USD bis < 500.000 USD
+                double minNormal = 5000.0;
+                double maxNormal = 499999.9;
+                startingUsd = minNormal + (maxNormal - minNormal) * r.nextDouble();
+                // walletType bleibt "NORMALE"
+            }
+        }
+        // Konsolidierte Ausgabe
+        System.out.printf("%s WALLET erstellt (#%d): %.2f USD%n", walletType, userWalletCount + 1, startingUsd);
         return new Wallet(StringUtil.generateRandomPassword(), startingUsd);
     }
 

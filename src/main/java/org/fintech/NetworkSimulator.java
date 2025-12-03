@@ -17,7 +17,7 @@ public class NetworkSimulator {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Runnable onUpdateCallback;
     private static final long MIN_WALLET_CREATION_PERIOD = 10;
-    private long currentWalletCreationPeriod = 3000;
+    private long currentWalletCreationPeriod = 1000;
     private final double periodMultiplier = 0.9;
     private final int periodThreshold = 20;
 
@@ -129,27 +129,41 @@ public class NetworkSimulator {
                 List<Wallet> allWallets = WalletManager.getWallets();
                 int userWalletCount = allWallets.size() - 1;
 
-                long maxDelay = 1500;
+                // Definition der Konstanten (Basiswerte)
+                long maxDelayBase = 1500;
                 long minDelayBase = 900;
-                long minDelayFast = 10;
-                int reductionFactor = 5;
+                long minDelayFast = 300;
+                int reductionFactor = 3;
 
-                // 🛑 NUTZT JETZT DIE HILFSMETHODE
-                long oldActualMinDelay = getAndSetCurrentTradeMinDelay(userWalletCount, minDelayBase, reductionFactor, minDelayFast);
-
+                // Berechnung der Reduktion, die auf beide Delays angewandt wird
                 long delayReduction = (long) userWalletCount * reductionFactor;
+
+                // -------------------------------------------------------------------
+                // NEUE BERECHNUNG DER DYNAMISCHEN MINIMAL- UND MAXIMALWERTE
+                // -------------------------------------------------------------------
+
+                // Die minimale tatsächliche Verzögerung kann nicht unter minDelayFast fallen
                 long actualMinDelay = Math.max(minDelayFast, minDelayBase - delayReduction);
 
-                // 🌟 NEUE LOGIK: Ausgabe, wenn sich die Basis-Verzögerung geändert hat
-                // Dies passiert, wenn eine neue Wallet erstellt wurde und die userWalletCount gestiegen ist.
+                // Die maximale tatsächliche Verzögerung wird um dieselbe Reduktion gekürzt.
+                // Der neue maximale Delay sollte nicht unter dem neuen minimalen Delay liegen!
+                long actualMaxDelay = Math.max(actualMinDelay, maxDelayBase - delayReduction);
+
+                // -------------------------------------------------------------------
+
+                // 3. Statusprüfung und Ausgabe (unter Verwendung der Hilfsmethode)
+                long oldActualMinDelay = getAndSetCurrentTradeMinDelay(userWalletCount, minDelayBase, reductionFactor, minDelayFast);
+
                 if (actualMinDelay != oldActualMinDelay) {
-                    System.out.printf("--- HANDELS-SCHWELLE GEÄNDERT (%d Wallets)! Neue Basis-Verzögerung: %.0fms (Maximal: %.0fms) ---%n",
-                            userWalletCount, (double)actualMinDelay, (double)maxDelay);
+                    System.out.printf("--- HANDELS-SCHWELLE GEÄNDERT (%d Wallets)! Neue Handelsspanne: %.0fms - %.0fms ---%n",
+                            userWalletCount, (double)actualMinDelay, (double)actualMaxDelay);
                 }
 
-                long nextDelay = actualMinDelay + new Random().nextInt((int) (maxDelay - actualMinDelay + 1));
+                // 4. Nächste Verzögerung wählen (zufällig zwischen actualMinDelay und actualMaxDelay)
+                long range = actualMaxDelay - actualMinDelay + 1;
+                long nextDelay = actualMinDelay + new Random().nextInt((int) range);
 
-                // 3. Nächsten Trade mit zufälliger Verzögerung planen
+                // 5. Nächsten Trade mit zufälliger Verzögerung planen
                 scheduleNextTrade(nextDelay);
                 System.out.println(nextDelay);
             }
