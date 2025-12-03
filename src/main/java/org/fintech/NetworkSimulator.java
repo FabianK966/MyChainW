@@ -17,7 +17,7 @@ public class NetworkSimulator {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Runnable onUpdateCallback;
     private static final long MIN_WALLET_CREATION_PERIOD = 10;
-    private long currentWalletCreationPeriod = 1000;
+    private long currentWalletCreationPeriod = 3000;
     private final double periodMultiplier = 0.9;
     private final int periodThreshold = 20;
 
@@ -171,8 +171,7 @@ public class NetworkSimulator {
     }
 
     private void simulateTrade() {
-        // ... (unveränderter Code von simulateTrade) ...
-
+        // 1. Initialisierung und Vorbereitung
         List<Wallet> allWallets = WalletManager.getWallets();
         Wallet supplyWallet = WalletManager.SUPPLY_WALLET;
         Random r = new Random();
@@ -183,43 +182,60 @@ public class NetworkSimulator {
 
         if (userWallets.isEmpty()) return;
 
+        // 2. Auswahl der Wallet und Handelsrichtung
         Wallet tradingWallet = userWallets.get(r.nextInt(userWallets.size()));
-        boolean isBuy = r.nextBoolean();
 
-        // 🌟 NEUE LOGIK: Bestimme den Handelsbetrag basierend auf 33% bis 90% der USD-Balance
+        // Bedingung: Wenn die Wallet (fast) keine SC hat, MUSS sie kaufen.
+        boolean mustBuy = tradingWallet.getBalance() < 0.01;
+        boolean isBuy = mustBuy || r.nextBoolean();
 
+        // 3. Berechnung des Handelsbetrags (garantiert 33% bis 50%)
         double currentPrice = priceSimulator.getCurrentPrice();
 
-        // Zufälliger Prozentsatz zwischen 33.0% und 90.0%
-        double percentage = 0.33 + r.nextDouble() * (0.90 - 0.33);
+        final double MIN_PERCENTAGE = 0.33; // 33%
+        final double MAX_PERCENTAGE = 0.98; // 50%
 
-        double maxUsdToTrade = tradingWallet.getUsdBalance() * percentage;
+        // 🛑 NEU: Zufälliger Prozentsatz zwischen MIN_PERCENTAGE und MAX_PERCENTAGE
+        // Dies ist der garantierte Prozentsatz der Balance, der gehandelt wird.
+        double actualTradePercentage = MIN_PERCENTAGE + (MAX_PERCENTAGE - MIN_PERCENTAGE) * r.nextDouble();
 
-        // Sicherstellen, dass der Betrag nicht null ist, aber auch nicht zu groß.
-        // Wir begrenzen den zufälligen USD-Handelsbetrag.
-        double usdToTrade = Math.max(1.0, r.nextDouble() * maxUsdToTrade);
+        double usdToTrade;
 
-        // Sicherstellen, dass der Betrag nicht 0 ist, und auf maximal 1.000.000 USD begrenzen,
-        // um übermäßige Schwankungen durch eine einzige Wallet zu vermeiden.
-        usdToTrade = Math.min(usdToTrade, 100000000.0);
+        if (isBuy) {
+            // Kauf: Berechne USD-Betrag als Prozentsatz der USD-Balance
+            usdToTrade = tradingWallet.getUsdBalance() * actualTradePercentage;
+        } else {
+            // Verkauf: Berechne SC-Betrag als Prozentsatz der SC-Balance und konvertiere in USD
+            // tradingWallet.getBalance() * actualTradePercentage (SC-Menge) * currentPrice (USD-Wert)
+            usdToTrade = (tradingWallet.getBalance() * actualTradePercentage) * currentPrice;
+        }
 
-        // Konvertierung in SC-Coins für die Blockchain-Transaktion
+        // 🛑 ABER: Wir müssen verhindern, dass Wallets mit sehr kleinen Balancen fast nichts handeln.
+        usdToTrade = Math.max(1.0, usdToTrade); // Mindestbetrag von 1.0 USD beibehalten (Schutz vor Kleinstbeträgen)
+
+        // Maximaler Limit-Schutz
+        usdToTrade = Math.min(usdToTrade, 100000000.0); // Limit auf 1 Million USD pro Trade
+
+        // Konvertierung in SC-Coins
         double tradeAmountSC = usdToTrade / currentPrice;
 
-        // Wir runden den SC-Betrag auf 3 Dezimalstellen, um die Logik sauberer zu halten
+        // Runden des SC-Betrags auf 3 Dezimalstellen
         tradeAmountSC = Math.round(tradeAmountSC * 1000.0) / 1000.0;
 
         double usdValue = tradeAmountSC * currentPrice; // Der tatsächliche USD-Wert des SC-Betrags
 
         if (usdValue < 1.0 || tradeAmountSC < 0.001) {
-            // Verhindern von extrem kleinen Transaktionen
+            // Verhindern von extrem kleinen Transaktionen (auch nach der Berechnung)
             return;
         }
 
         List<Transaction> txs = new ArrayList<>();
 
+        // 4. Ausführung der Transaktion
         if (isBuy) {
             // SC KAUFEN (USD -> SC, von Supply)
+
+            // Finaler Check: Hat die Wallet USD und die Supply Wallet SC?
             if (tradingWallet.getUsdBalance() < usdValue || supplyWallet.getBalance() < tradeAmountSC + 0.01) {
                 return;
             }
@@ -231,47 +247,59 @@ public class NetworkSimulator {
                 priceSimulator.executeTrade(tradeAmountSC, true);
 
                 System.out.printf("SIMULIERT KAUF: %s... kaufte %.3f SC für %.2f USD (%.0f%% der USD-Balance) | Neuer Preis: %.4f%n",
-                        tradingWallet.getAddress().substring(0, 10), tradeAmountSC, usdValue, percentage * 100, priceSimulator.getCurrentPrice());
+                        tradingWallet.getAddress().substring(0, 10), tradeAmountSC, usdValue, actualTradePercentage * 100, priceSimulator.getCurrentPrice());
 
             } catch (Exception ignored) { return; }
 
 
         } else {
             // SC VERKAUFEN (SC -> USD, an Exchange)
-            // Wir prüfen, ob der Wallet genug SC hat, um den TradeAmountSC zu decken.
+
+            // Finaler Check: Hat die Wallet genug SC?
             if (tradingWallet.getBalance() < tradeAmountSC + 0.01) {
                 return;
             }
 
             try {
-                // Wir schreiben den vollen USD-Wert (usdValue) gut.
                 tradingWallet.creditUsd(usdValue);
                 txs.add(tradingWallet.createTransaction(MyChainGUI.EXCHANGE_ADDRESS, tradeAmountSC, "SIMULIERT: SC Verkauf an Exchange"));
 
                 priceSimulator.executeTrade(tradeAmountSC, false);
 
-                // Da beim Verkauf SC gegen USD getauscht wird, ist die ursprüngliche USD-Balance des
-                // Käufers irrelevant, aber wir können den Prozentsatz der SC-Balance anzeigen, wenn Sie möchten.
-                // Um die Logik konsistent zu halten, zeigen wir weiterhin den Prozentsatz der
-                // USD-Änderung an (die den Wert des gehandelten SC darstellt).
-                System.out.printf("SIMULIERT VERKAUF: %s... verkaufte %.3f SC für %.2f USD (%.0f%% der sim. Kaufkraft) | Neuer Preis: %.4f%n",
-                        tradingWallet.getAddress().substring(0, 10), tradeAmountSC, usdValue, percentage * 100, priceSimulator.getCurrentPrice());
+                System.out.printf("SIMULIERT VERKAUF: %s... verkaufte %.3f SC für %.2f USD (%.0f%% der SC-Balance) | Neuer Preis: %.4f%n",
+                        tradingWallet.getAddress().substring(0, 10), tradeAmountSC, usdValue, actualTradePercentage * 100, priceSimulator.getCurrentPrice());
 
             } catch (Exception ignored) { return; }
         }
 
+        // 5. Mining und Speicherung
         if (!txs.isEmpty()) {
-            // BLOCK-MINING UND SPEICHERUNG LAUFEN HIER AUF DEM HINTERGRUND-THREAD!
             blockchain.addBlock(txs);
             BlockchainPersistence.saveBlockchain(blockchain);
             WalletManager.recalculateAllBalances();
             WalletManager.saveWallets();
 
-            // NUR DIE GUI-AKTUALISIERUNG WIRD AUF DEM JAVA-FX-THREAD ausgeführt
+            // GUI-Aktualisierung
             Platform.runLater(this::triggerUpdate);
         }
     }
 
+    public void stopWalletGeneration() {
+        if (walletTimer != null) {
+            walletTimer.cancel();
+            walletTimer = null;
+            System.out.println("--- Wallet-Generierung gestoppt. ---");
+        }
+    }
+
+    public void startWalletGeneration() {
+        if (running.get() && walletTimer == null) {
+            walletTimer = new Timer(true);
+            System.out.println("--- Wallet-Generierung wieder gestartet. ---");
+            // Planen Sie die erste Erstellung mit der aktuellen Periodendauer
+            scheduleNextWalletCreation(currentWalletCreationPeriod);
+        }
+    }
 
     public void stop() {
         running.set(false);

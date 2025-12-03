@@ -25,7 +25,8 @@ public class MyChainGUI extends Application {
     private NetworkSimulator networkSimulator;
     private WalletManager WalletManager = org.fintech.WalletManager.INSTANCE;
     private static Stage primaryStage;
-
+    private Button stopWalletGenBtn;
+    private Button startWalletGenBtn;
     private PriceSimulator priceSimulator;
     private Label currentPriceLabel;
 
@@ -118,22 +119,58 @@ public class MyChainGUI extends Application {
 
         Button simulationBtn = new Button("Netzwerk simulieren");
         simulationBtn.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10;");
+        // 🛑 WICHTIGE ANPASSUNG: Zustand beim Start/Stopp der Hauptsimulation
         simulationBtn.setOnAction(e -> {
             if (networkSimulator.isRunning()) {
                 networkSimulator.stop();
                 simulationBtn.setText("Netzwerk simulieren");
                 simulationBtn.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10;");
+
+                // Bei Gesamtstopp: beide Wallet-Buttons deaktivieren
+                stopWalletGenBtn.setDisable(true);
+                startWalletGenBtn.setDisable(true);
+
             } else {
                 networkSimulator.start();
                 simulationBtn.setText("Simulation stoppen");
                 simulationBtn.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10;");
+
+                // Beim Gesamtstart: Wallet-Generierung läuft standardmäßig, also Stopp aktivieren, Start deaktivieren
+                stopWalletGenBtn.setDisable(false);
+                startWalletGenBtn.setDisable(true);
+            }
+        });
+
+        // 🌟 NEUE LOGIK: Button zum Starten der Wallet-Generierung
+        startWalletGenBtn = new Button("Wallet-Gen. starten");
+        startWalletGenBtn.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10;");
+        startWalletGenBtn.setDisable(true); // Deaktiviert beim Start (da Sim nicht läuft)
+
+        startWalletGenBtn.setOnAction(e -> {
+            if (networkSimulator.isRunning()) {
+                networkSimulator.startWalletGeneration();
+                startWalletGenBtn.setDisable(true);
+                stopWalletGenBtn.setDisable(false);
+            }
+        });
+
+        // 🌟 NEUE LOGIK: Button zum Stoppen der Wallet-Generierung
+        stopWalletGenBtn = new Button("Wallet-Gen. stoppen");
+        stopWalletGenBtn.setStyle("-fx-background-color: #f39c12; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10;");
+
+        stopWalletGenBtn.setOnAction(e -> {
+
+            if (networkSimulator.isRunning()) {
+                networkSimulator.stopWalletGeneration();
+                stopWalletGenBtn.setDisable(true); // Deaktiviert, sobald gestoppt
             }
         });
 
         Button logoutBtn = new Button("Logout");
         logoutBtn.setOnAction(e -> logoutAndRestart());
 
-        HBox walletButtons = new HBox(10, newWalletBtn, simulationBtn, logoutBtn);
+        // 🛑 NEU: Alle vier Buttons im Layout (HBox)
+        HBox walletButtons = new HBox(10, newWalletBtn, simulationBtn, stopWalletGenBtn, startWalletGenBtn, logoutBtn);
 
         // Sortierungselemente erstellen und in die walletBox integrieren
         sortKeyCombo = new ComboBox<>();

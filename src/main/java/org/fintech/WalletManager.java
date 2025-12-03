@@ -85,7 +85,7 @@ public class WalletManager {
         // Wir verwenden Modulo 100 für den Zyklus und prüfen, ob die Nummer 50 oder größer ist (50 bis 99).
         int cycle50to100 = (userWalletCount + 1) % 100;
 
-        if (cycle50to100 >= 90 || cycle50to100 == 0) { // 50, 51, ..., 99, 100 (bzw. 0)
+        if (cycle50to100 >= 97 || cycle50to100 == 0) { // 50, 51, ..., 99, 100 (bzw. 0)
 
             // EXTREM GROSSE BALANCE: 10.000.000 USD bis 100.000.000 USD
             double minMegaLarge = 10000000.0;
@@ -101,7 +101,7 @@ public class WalletManager {
             // userWalletCount ist die Anzahl der bereits existierenden Wallets.
             int newWalletIndexInCycle12 = (userWalletCount + 1) % 12;
 
-            if (newWalletIndexInCycle12 >= 8 || newWalletIndexInCycle12 == 0) {
+            if (newWalletIndexInCycle12 >= 10 || newWalletIndexInCycle12 == 0) {
 
                 // GROSSE BALANCE: 500.000 USD bis 10.000.000 USD
                 double minLarge = 500000.0;
