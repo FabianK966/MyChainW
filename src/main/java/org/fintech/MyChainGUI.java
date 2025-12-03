@@ -144,7 +144,6 @@ public class MyChainGUI extends Application {
         // 🌟 NEUE LOGIK: Button zum Starten der Wallet-Generierung
         startWalletGenBtn = new Button("Wallet-Gen. starten");
         startWalletGenBtn.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10;");
-        startWalletGenBtn.setDisable(true); // Deaktiviert beim Start (da Sim nicht läuft)
 
         startWalletGenBtn.setOnAction(e -> {
             if (networkSimulator.isRunning()) {
@@ -163,6 +162,7 @@ public class MyChainGUI extends Application {
             if (networkSimulator.isRunning()) {
                 networkSimulator.stopWalletGeneration();
                 stopWalletGenBtn.setDisable(true); // Deaktiviert, sobald gestoppt
+                startWalletGenBtn.setDisable(false);
             }
         });
 
