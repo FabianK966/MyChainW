@@ -8,7 +8,7 @@ public class PriceSimulator {
     private final Random random = new Random();
 
     // Parameter zur Steuerung der Marktvolatilität
-    private static final double PRICE_IMPACT_FACTOR = 0.00001; // Wie stark 100 SC den Preis beeinflussen
+    private static final double PRICE_IMPACT_FACTOR = 0.000001; // Wie stark 100 SC den Preis beeinflussen
     private static final double BASE_VOLATILITY = 0.00001;     // Basis-Zufallsschwankung
 
     public PriceSimulator(double initialPrice) {

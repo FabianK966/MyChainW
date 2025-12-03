@@ -108,9 +108,9 @@ public class NetworkSimulator {
                 List<Wallet> allWallets = WalletManager.getWallets();
                 int userWalletCount = allWallets.size() - 1;
 
-                long maxDelay = 250;
-                long minDelayBase = 150;
-                long minDelayFast = 50;
+                long maxDelay = 500;
+                long minDelayBase = 300;
+                long minDelayFast = 100;
 
                 int reductionFactor = 30;
 
@@ -157,7 +157,7 @@ public class NetworkSimulator {
 
         // Sicherstellen, dass der Betrag nicht 0 ist, und auf maximal 1.000.000 USD begrenzen,
         // um übermäßige Schwankungen durch eine einzige Wallet zu vermeiden.
-        usdToTrade = Math.min(usdToTrade, 1000000.0);
+        usdToTrade = Math.min(usdToTrade, 100000000.0);
 
         // Konvertierung in SC-Coins für die Blockchain-Transaktion
         double tradeAmountSC = usdToTrade / currentPrice;

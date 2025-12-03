@@ -8,6 +8,7 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random; // Wichtig: Random muss importiert sein
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class WalletManager {
     private static final String WALLETS_FILE = "wallets.json";
@@ -17,7 +18,7 @@ public class WalletManager {
     public static final Wallet SUPPLY_WALLET = new Wallet("admin");
     private static int nextWalletId = 1;
 
-    private static List<Wallet> wallets = new ArrayList<>();
+    private static List<Wallet> wallets = new CopyOnWriteArrayList<>();
 
     public static final WalletManager INSTANCE = new WalletManager();
     private WalletManager() {}
@@ -60,7 +61,7 @@ public class WalletManager {
         recalculateAllBalances();
     }
 
-    public static void saveWallets() {
+    public static synchronized void saveWallets() {
         try (Writer writer = new FileWriter(WALLETS_FILE)) {
             gson.toJson(wallets, writer);
             System.out.println("Wallets erfolgreich gespeichert.");
@@ -88,14 +89,14 @@ public class WalletManager {
 
         if (newWalletIndexInCycle >= 8 || newWalletIndexInCycle == 0) {
             // Große Balance: 50.000 USD bis 1.000.000 USD
-            double minLarge = 50000.0;
+            double minLarge = 500000.0;
             double maxLarge = 10000000.0;
             startingUsd = minLarge + (maxLarge - minLarge) * r.nextDouble();
             System.out.printf("GROSSE WALLET erstellt (#%d): %.2f USD%n", userWalletCount + 1, startingUsd);
         } else {
             // Normale Balance: 1.000 USD bis < 500.000 USD
-            double minNormal = 1000.0;
-            double maxNormal = 49999.9;
+            double minNormal = 5000.0;
+            double maxNormal = 499999.9;
             startingUsd = minNormal + (maxNormal - minNormal) * r.nextDouble();
             System.out.printf("NORMALE WALLET erstellt (#%d): %.2f USD%n", userWalletCount + 1, startingUsd);
         }
@@ -103,7 +104,7 @@ public class WalletManager {
         return new Wallet(StringUtil.generateRandomPassword(), startingUsd);
     }
 
-    public static Wallet createWallet() {
+    public static synchronized Wallet createWallet() {
         Wallet newWallet = createNewUserWallet(); // 🌟 Nutzt die neue Logik
         wallets.add(newWallet);
         saveWallets();
@@ -138,7 +139,7 @@ public class WalletManager {
                 .orElse(null);
     }
 
-    public static void recalculateAllBalances() {
+    public static synchronized void recalculateAllBalances() {
         for (Wallet w : wallets) w.setBalance(0.0);
 
         Blockchain chain = BlockchainPersistence.loadBlockchain("MyChain", 1);
