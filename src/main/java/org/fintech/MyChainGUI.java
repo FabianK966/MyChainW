@@ -127,7 +127,7 @@ public class MyChainGUI extends Application {
 
             String scBalance = w.getBalance() > 0 ? String.format("\nInitial SC Grant: %.1f SC (vom Supply abgezogen)", w.getBalance()) : "";
             new Alert(Alert.AlertType.INFORMATION,
-                    "Neue Wallet erstellt!\n\nAdresse:\n" + w.getAddress() +
+                     w.getAddress() +
                             "\nStartguthaben: " + String.format("%.2f", w.getUsdBalance()) + " USD" +
                             scBalance,
                     ButtonType.OK).showAndWait();

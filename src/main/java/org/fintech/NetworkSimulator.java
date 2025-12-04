@@ -23,23 +23,25 @@ public class NetworkSimulator {
     private Runnable onPriceUpdateCallback;
 
     // Konfiguration der Wallet-Generierung
-    private static final long MIN_WALLET_CREATION_PERIOD = 300;
-    private long currentWalletCreationPeriod = 1000;
+    private static final long MIN_WALLET_CREATION_PERIOD = 100;
+    // 🛑 DELAY RESET: Muss beim Start neu gesetzt werden
+    private long currentWalletCreationPeriod = 2000;
     private final double periodMultiplier = 0.95;
     private final int periodThreshold = 50;
 
     // Konfiguration der Marktstimmung
     private double buyBias = 0.50;
 
-    // 🌟 NEUE KONSTANTEN: Limitierung der Dateigröße
-    private static final long MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 5 MB Limit
-    private static final String BLOCKCHAIN_FILE_PATH = "blockchain.json";
+    // 🌟 KONSTANTEN: Dateigröße und Pfade
+    private static final long MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024; // 2 MB Limit
+    private static final String BLOCKCHAIN_FILE_PATH = "blockchain.json"; // 🛑 KORRIGIERTER PFAD
 
     // Konfiguration der GUI-Aktualisierung
     private static final long GUI_UPDATE_PERIOD = 10000; // 10 Sekunden für Chart/Listen
 
     // HANDELS-GESCHWINDIGKEITSANALYSE
     private static final long INITIAL_MIN_DELAY = 900;
+    // 🛑 DELAY RESET: Muss beim Start neu gesetzt werden
     private static long currentTradeMinDelay = INITIAL_MIN_DELAY;
 
     public NetworkSimulator(Blockchain blockchain, WalletManager walletManager, PriceSimulator priceSimulator) {
@@ -64,13 +66,15 @@ public class NetworkSimulator {
 
     public void setBuyBias(double bias) {
         this.buyBias = Math.max(0.0, Math.min(1.0, bias));
-        System.out.printf("--- Markt-Bias aktualisiert: %.0f%% Kaufinteresse ---%n", bias * 100);
     }
 
     public void start() {
         if (running.getAndSet(true)) return;
 
+        // 🛑 NEUSTART-LOGIK: Setzt die Delays auf die Startwerte zurück
         currentTradeMinDelay = INITIAL_MIN_DELAY;
+        this.currentWalletCreationPeriod = 1000;
+        // -----------------------------------------------------------------
 
         System.out.println("=== NETZWERK-SIMULATION GESTARTET ===");
 
@@ -79,7 +83,6 @@ public class NetworkSimulator {
 
         // HANDELS-SIMULATION STARTEN
         transactionTimer = new Timer(true);
-        System.out.println("→ Kauf/Verkauf-Simulationen (Frequenz passt sich der Anzahl der Wallets an)");
         scheduleNextTrade(5);
 
         // GUI-AKTUALISIERUNGS-TIMER STARTEN (10 Sekunden)
@@ -190,7 +193,6 @@ public class NetworkSimulator {
                 }
 
                 Platform.runLater(() -> {
-                    System.out.println("NEUE WALLET erstellt: " + newWallet.getAddress().substring(0, 16) + "...");
                 });
 
                 scheduleNextWalletCreation(currentWalletCreationPeriod);
@@ -209,8 +211,8 @@ public class NetworkSimulator {
 
                 simulateTrade();
 
-                List<Wallet> allWallets = WalletManager.getWallets();
-                int userWalletCount = allWallets.size() - 1;
+                // 🛑 WICHTIG: Nutzt die historische maximale Anzahl an Wallets für die Geschwindigkeit
+                int userWalletCount = WalletManager.getMaxWalletCountForSimulation();
 
                 long maxDelayBase = 900;
                 long minDelayBase = 300;
@@ -253,7 +255,7 @@ public class NetworkSimulator {
                 // 1. Kette zurücksetzen, behält Genesis Block (#0)
                 blockchain.resetChain();
 
-                // 2. Wallets neu berechnen: WICHTIG! Setzt die Balancen auf den Stand nach der Genesis-Transaktion zurück.
+                // 2. Wallets neu berechnen: Setzt die Balancen auf den Stand nach der Genesis-Transaktion zurück.
                 WalletManager.recalculateAllBalances();
                 WalletManager.saveWallets();
 
@@ -294,6 +296,7 @@ public class NetworkSimulator {
             isBuy = true;
         } else {
             isBuy = r.nextDouble() < this.buyBias;
+            System.out.println(buyBias);
         }
 
         // 3. Berechnung des Handelsbetrags
@@ -363,13 +366,13 @@ public class NetworkSimulator {
         if (!txs.isEmpty()) {
             blockchain.addBlock(txs);
 
-            // 🛑 NEU: Prüfung und Zurücksetzung nach dem Mining
+            // 🛑 PRÜFUNG: Blockchain Reset
             checkAndResetChain();
 
-            // Speichern und Wallets neu berechnen (wird auch bei Reset durchgeführt, aber hier zur Sicherheit für den Normalbetrieb)
+            // Speichern und Wallets neu berechnen
             BlockchainPersistence.saveBlockchain(blockchain);
             WalletManager.recalculateAllBalances();
-            WalletManager.saveWallets();
+            WalletManager.saveWallets(); // Speichert nur kritische Wallets
 
             return true;
         }
