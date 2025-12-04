@@ -16,11 +16,11 @@ public class NetworkSimulator {
     private Timer walletTimer;
     private Timer transactionTimer;
     private Timer updateTimer;
+    private Timer priceUpdateTimer;
+
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Runnable onUpdateCallback;
-    private static final long GUI_UPDATE_PERIOD = 10000;
-    private Timer priceUpdateTimer;
-    private Runnable onPriceUpdateCallback; // 🌟 NEU: Callback nur für den Preis
+    private Runnable onPriceUpdateCallback;
 
     // Konfiguration der Wallet-Generierung
     private static final long MIN_WALLET_CREATION_PERIOD = 300;
@@ -31,9 +31,16 @@ public class NetworkSimulator {
     // Konfiguration der Marktstimmung
     private double buyBias = 0.50;
 
-    // 🌟 HANDELS-GESCHWINDIGKEITSANALYSE
+    // 🌟 NEUE KONSTANTEN: Limitierung der Dateigröße
+    private static final long MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 5 MB Limit
+    private static final String BLOCKCHAIN_FILE_PATH = "blockchain.json";
+
+    // Konfiguration der GUI-Aktualisierung
+    private static final long GUI_UPDATE_PERIOD = 10000; // 10 Sekunden für Chart/Listen
+
+    // HANDELS-GESCHWINDIGKEITSANALYSE
     private static final long INITIAL_MIN_DELAY = 900;
-    private static long currentTradeMinDelay = INITIAL_MIN_DELAY; // Speichert die zuletzt berechnete minimale Handelsverzögerung
+    private static long currentTradeMinDelay = INITIAL_MIN_DELAY;
 
     public NetworkSimulator(Blockchain blockchain, WalletManager walletManager, PriceSimulator priceSimulator) {
         this.blockchain = blockchain;
@@ -41,15 +48,14 @@ public class NetworkSimulator {
         this.priceSimulator = priceSimulator;
     }
 
-    // 🌟 NEUE METHODE: Setter für den Preis-Callback
-    public void setOnPriceUpdate(Runnable callback) {
-        this.onPriceUpdateCallback = callback;
-    }
-
     // --- ÖFFENTLICHE API ---
 
     public void setOnUpdate(Runnable callback) {
         this.onUpdateCallback = callback;
+    }
+
+    public void setOnPriceUpdate(Runnable callback) {
+        this.onPriceUpdateCallback = callback;
     }
 
     public boolean isRunning() {
@@ -74,26 +80,25 @@ public class NetworkSimulator {
         // HANDELS-SIMULATION STARTEN
         transactionTimer = new Timer(true);
         System.out.println("→ Kauf/Verkauf-Simulationen (Frequenz passt sich der Anzahl der Wallets an)");
-        scheduleNextTrade(50);
+        scheduleNextTrade(5);
 
-        // 🌟 NEU: GUI-AKTUALISIERUNGS-TIMER STARTEN
+        // GUI-AKTUALISIERUNGS-TIMER STARTEN (10 Sekunden)
         updateTimer = new Timer(true);
         updateTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                // Löst das Update für Chart, Listen etc. alle 10 Sekunden aus.
                 triggerUpdate();
             }
         }, 0, GUI_UPDATE_PERIOD);
 
-        // 🌟 NEU: PREIS-UPDATE-TIMER STARTEN (1 Sekunde)
+        // PREIS-UPDATE-TIMER STARTEN (1 Sekunde)
         priceUpdateTimer = new Timer(true);
         priceUpdateTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
                 triggerPriceUpdate();
             }
-        }, 0, 1000); // Alle 1000 ms = 1 Sekunde
+        }, 0, 1000);
     }
 
     public void stop() {
@@ -111,7 +116,6 @@ public class NetworkSimulator {
             updateTimer = null;
         }
 
-        // 🌟 NEU: Preis-Update-Timer stoppen
         if (priceUpdateTimer != null) {
             priceUpdateTimer.cancel();
             priceUpdateTimer = null;
@@ -142,19 +146,15 @@ public class NetworkSimulator {
 
     // --- INTERNE HILFSMETHODEN ---
 
-    /**
-     * Löst das UI-Update aus. Muss immer im FX-Thread aufgerufen werden.
-     */
-    private void triggerPriceUpdate() {
-        if (onPriceUpdateCallback != null) {
-            Platform.runLater(onPriceUpdateCallback);
+    private void triggerUpdate() {
+        if (onUpdateCallback != null) {
+            Platform.runLater(onUpdateCallback);
         }
     }
 
-    private void triggerUpdate() {
-        if (onUpdateCallback != null) {
-            // Führt das Callback im JavaFX Application Thread aus
-            Platform.runLater(onUpdateCallback);
+    private void triggerPriceUpdate() {
+        if (onPriceUpdateCallback != null) {
+            Platform.runLater(onPriceUpdateCallback);
         }
     }
 
@@ -177,10 +177,8 @@ public class NetworkSimulator {
             public void run() {
                 if (!running.get()) return;
 
-                // 1. Wallet erstellen (erhöht die Wallet-Anzahl)
                 Wallet newWallet = WalletManager.createWallet();
 
-                // 2. Verzögerung anpassen (Beschleunigung), wenn Schwelle erreicht
                 int userWalletCount = WalletManager.getWallets().size() - 1;
 
                 if (userWalletCount > 0 && userWalletCount % periodThreshold == 0) {
@@ -191,13 +189,10 @@ public class NetworkSimulator {
                             userWalletCount, (double)currentWalletCreationPeriod, currentWalletCreationPeriod / 1000.0);
                 }
 
-                // 🛑 KORREKTUR: Trigger Update (muss im FX-Thread laufen)
-                // Da wir uns hier im Timer-Thread befinden, ist Platform.runLater erforderlich
                 Platform.runLater(() -> {
                     System.out.println("NEUE WALLET erstellt: " + newWallet.getAddress().substring(0, 16) + "...");
                 });
 
-                // 3. Nächste Erstellung mit der (möglicherweise) neuen Verzögerung planen
                 scheduleNextWalletCreation(currentWalletCreationPeriod);
             }
         }, delay);
@@ -212,17 +207,14 @@ public class NetworkSimulator {
             public void run() {
                 if (!running.get()) return;
 
-                // 1. Handelslogik ausführen (läuft auf dem TimerTask-Thread)
-                boolean didTradeHappen = simulateTrade();
+                simulateTrade();
 
-                // 2. Dynamische Verzögerung basierend auf Wallet-Anzahl
                 List<Wallet> allWallets = WalletManager.getWallets();
                 int userWalletCount = allWallets.size() - 1;
 
-                // Definition der Konstanten (Basiswerte)
                 long maxDelayBase = 900;
                 long minDelayBase = 300;
-                long minDelayFast = 40;
+                long minDelayFast = 10;
                 int reductionFactor = 1;
 
                 long delayReduction = (long) userWalletCount * reductionFactor;
@@ -230,7 +222,6 @@ public class NetworkSimulator {
                 long actualMinDelay = Math.max(minDelayFast, minDelayBase - delayReduction);
                 long actualMaxDelay = Math.max(actualMinDelay, maxDelayBase - delayReduction);
 
-                // 3. Statusprüfung und Ausgabe
                 long oldActualMinDelay = getAndSetCurrentTradeMinDelay(userWalletCount, minDelayBase, reductionFactor, minDelayFast);
 
                 if (actualMinDelay != oldActualMinDelay) {
@@ -238,20 +229,49 @@ public class NetworkSimulator {
                             userWalletCount, (double)actualMinDelay, (double)actualMaxDelay);
                 }
 
-                // 4. Nächste Verzögerung wählen (zufällig zwischen actualMinDelay und actualMaxDelay)
                 long range = actualMaxDelay - actualMinDelay + 1;
                 long nextDelay = actualMinDelay + new Random().nextInt((int) range);
 
-                // 5. Nächsten Trade mit zufälliger Verzögerung planen
                 scheduleNextTrade(nextDelay);
             }
         }, delay);
     }
 
     /**
-     * Führt einen simulierten Kauf- oder Verkaufsvorgang aus.
-     * @return true, wenn ein Block gemined wurde, ansonsten false.
+     * Prüft die Größe der Blockchain-Datei und setzt die Kette bis auf den Genesis Block zurück,
+     * falls das Limit überschritten wird.
+     * @return true, wenn die Kette zurückgesetzt wurde.
      */
+    private boolean checkAndResetChain() {
+        try {
+            java.io.File file = new java.io.File(BLOCKCHAIN_FILE_PATH);
+
+            if (file.exists() && file.length() > MAX_FILE_SIZE_BYTES) {
+                System.out.printf("🚨 ALARM: Blockchain-Datei (%.2f MB) überschreitet Limit (%.2f MB). Wird auf Genesis Block zurückgesetzt...%n",
+                        file.length() / (1024.0 * 1024.0), MAX_FILE_SIZE_BYTES / (1024.0 * 1024.0));
+
+                // 1. Kette zurücksetzen, behält Genesis Block (#0)
+                blockchain.resetChain();
+
+                // 2. Wallets neu berechnen: WICHTIG! Setzt die Balancen auf den Stand nach der Genesis-Transaktion zurück.
+                WalletManager.recalculateAllBalances();
+                WalletManager.saveWallets();
+
+                // 3. Neue (kleine) Kette speichern (überschreibt die alte, große Datei)
+                BlockchainPersistence.saveBlockchain(blockchain);
+
+                // Da ein Reset die Chain verändert, muss ein UI Update an den Update-Timer gesendet werden.
+                triggerUpdate();
+
+                return true;
+            }
+        } catch (Exception e) {
+            System.err.println("Fehler bei der Überprüfung/Zurücksetzung der Blockchain-Datei: " + e.getMessage());
+        }
+        return false;
+    }
+
+
     private boolean simulateTrade() {
         // 1. Initialisierung und Vorbereitung
         List<Wallet> allWallets = WalletManager.getWallets();
@@ -271,7 +291,7 @@ public class NetworkSimulator {
 
         boolean isBuy;
         if (mustBuy) {
-            isBuy = true; // Zwang: Kaufen
+            isBuy = true;
         } else {
             isBuy = r.nextDouble() < this.buyBias;
         }
@@ -279,8 +299,8 @@ public class NetworkSimulator {
         // 3. Berechnung des Handelsbetrags
         double currentPrice = priceSimulator.getCurrentPrice();
 
-        final double MIN_PERCENTAGE = 0.5; // realistischerer Mindestwert
-        final double MAX_PERCENTAGE = 0.95; // realistischerer Höchstwert
+        final double MIN_PERCENTAGE = 0.33;
+        final double MAX_PERCENTAGE = 0.95;
 
         double actualTradePercentage = MIN_PERCENTAGE + (MAX_PERCENTAGE - MIN_PERCENTAGE) * r.nextDouble();
 
@@ -306,7 +326,6 @@ public class NetworkSimulator {
 
         // 4. Ausführung der Transaktion
         if (isBuy) {
-            // Finaler Check: Hat die Wallet USD und die Supply Wallet SC?
             if (tradingWallet.getUsdBalance() < usdValue || supplyWallet.getBalance() < tradeAmountSC + 0.01) {
                 return false;
             }
@@ -324,7 +343,6 @@ public class NetworkSimulator {
 
 
         } else {
-            // Finaler Check: Hat die Wallet genug SC?
             if (tradingWallet.getBalance() < tradeAmountSC + 0.01) {
                 return false;
             }
@@ -344,11 +362,15 @@ public class NetworkSimulator {
         // 5. Mining und Speicherung
         if (!txs.isEmpty()) {
             blockchain.addBlock(txs);
+
+            // 🛑 NEU: Prüfung und Zurücksetzung nach dem Mining
+            checkAndResetChain();
+
+            // Speichern und Wallets neu berechnen (wird auch bei Reset durchgeführt, aber hier zur Sicherheit für den Normalbetrieb)
             BlockchainPersistence.saveBlockchain(blockchain);
             WalletManager.recalculateAllBalances();
             WalletManager.saveWallets();
 
-            // 🛑 WICHTIG: Das eigentliche UI-Update wird im TimerTask nach simulateTrade() ausgeführt!
             return true;
         }
         return false;
