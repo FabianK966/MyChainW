@@ -316,7 +316,7 @@ public class NetworkSimulator {
         }
 
         usdToTrade = Math.max(1.0, usdToTrade);
-        usdToTrade = Math.min(usdToTrade, 100000000.0);
+        usdToTrade = Math.min(usdToTrade, 10000000000.0);
 
         double tradeAmountSC = Math.round((usdToTrade / currentPrice) * 1000.0) / 1000.0;
         double usdValue = tradeAmountSC * currentPrice;
